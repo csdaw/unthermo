@@ -9,14 +9,13 @@ import (
 	"errors"
 	"io"
 	"log"
-	"os"
 	"unicode/utf16"
 )
 
 //File is an in-memory representation of the Thermo RAW file
 type File struct {
-	//the file on disk
-	f *os.File
+	//the data of the file
+	f *bytes.Reader
 	//scanevents contains additional data about the scans (Hz-m/z conversion, scan type, ...)
 	scanevents ScanEvents
 	//scanindexentries is an index containing the scan addresses and additional info
@@ -26,11 +25,12 @@ type File struct {
 
 //Open opens the supplied filename and reads the indices from the RAW file in memory. Multiple files may be read concurrently.
 func Open(fn string) (file File, err error) {
-	f, err := os.Open(fn)
+	data, err := Asset("small.RAW")
 	if err != nil {
 		log.Println(err)
 		return
 	}
+	f := bytes.NewReader(data)
 
 	//Read headers for file version and RunHeader addresses.
 	info, ver := readHeaders(f)
@@ -67,7 +67,7 @@ func Open(fn string) (file File, err error) {
 
 //Close closes the RAW file
 func (rf *File) Close() error {
-	return rf.f.Close()
+	return nil
 }
 
 /*
