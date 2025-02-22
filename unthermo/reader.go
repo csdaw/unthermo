@@ -98,7 +98,7 @@ func (rf *File) Scan(sn int) (scan ms.Scan) {
 	for j := range rf.scanevents[sn-1].Reaction {
 		scan.PrecursorMzs[j] = rf.scanevents[sn-1].Reaction[j].Precursormz
 	}
-	scan.Spectrum = func() ms.Spectrum { return rf.spectrum(sn) }
+	scan.Spectrum = func(centroided ...bool) ms.Spectrum { return rf.spectrum(sn, centroided...) }
 	return
 }
 
@@ -140,12 +140,26 @@ func (rf *File) ComputeMeanSpectrum() (s ms.Spectrum) {
 }
 
 //Spectrum returns an ms.Spectrum belonging to the scan number in argument
-func (rf *File) spectrum(sn int) (s ms.Spectrum) {
+func (rf *File) spectrum(sn int, centroided ...bool) (s ms.Spectrum) {
 	//read Scan Packet for the scan
 	scn := new(ScanDataPacket)
 	readBetween(rf.f, rf.scanindex[sn-1].Offset, rf.scanindex[sn-1].Offset+uint64(rf.scanindex[sn-1].DataPacketSize), 0, scn)
 
-	if scn.Profile.PeakCount > 0 {
+	if len(centroided) > 0 && centroided[0] || scn.Profile.PeakCount <= 0 {
+		//Save the Centroided Peaks, they also occur in profile scans but
+		//overlap with profiles, Thermo always does centroiding just for fun
+		for i := uint32(0); i < scn.PeakList.Count; i++ {
+			s = append(
+				s,
+				ms.Peak{
+					Mz: float64(scn.PeakList.Peaks[i].Mz),
+					I: scn.PeakList.Peaks[i].Abundance
+				}
+			)
+		}
+	} else {
+		
+	
 		//convert Hz values into m/z and save the profile peaks
 		for i := uint32(0); i < scn.Profile.PeakCount; i++ {
 			for j := uint32(0); j < scn.Profile.Chunks[i].Nbins; j++ {
@@ -155,14 +169,6 @@ func (rf *File) spectrum(sn int) (s ms.Spectrum) {
 				s = append(s,
 					ms.Peak{Mz: tmpmz, I: scn.Profile.Chunks[i].Signal[j]})
 			}
-		}
-	} else {
-		//Save the Centroided Peaks, they also occur in profile scans but
-		//overlap with profiles, Thermo always does centroiding just for fun
-		for i := uint32(0); i < scn.PeakList.Count; i++ {
-			s = append(s,
-				ms.Peak{Mz: float64(scn.PeakList.Peaks[i].Mz),
-					I: scn.PeakList.Peaks[i].Abundance})
 		}
 	}
 	return
